@@ -23,26 +23,38 @@ jsip_uri::jsip_uri(
     const uint16_t _port
 )
 {
+    if(_host == "")
+    {
+        throw(HOST_EXCEPTION_MSG);
+    }
+    if(_user == "")
+    {
+        if(_password != "")
+        {
+            throw(PASSWORD_WITH_NO_USER_EXCEPTION_MSG);
+        }
+    }
     if(_is_secure)
         this->scheme = "sips";
     else
         this->scheme = "sip";
+
     this->host = _host;
-    this->user = _user;
+    this->user = convert_to_escaped_string(_user.c_str() , URI_USER_RESERVED_SET);
+    this->password = convert_to_escaped_string(_password.c_str() , URI_PASS_RESERVED_SET);
     this->port = _port;
-    this->password = _password;
     this->ttl_param= false;
 }
 bool jsip_uri::operator==(const jsip_uri& B){
-    if(this->scheme != B.scheme)
+    if( strcasecmp(this->scheme.c_str() , B.scheme.c_str()) != 0)
         {
             return false;
         }
     if(
-        (this-> user != B.user) ||
-        (this-> host != B.host) ||
-        (this-> password != B.password) ||
-        (this-> port != B.port)
+        (this->user != B.user) ||
+        ( strcasecmp(this->host.c_str() , B.host.c_str()  ) != 0 ) ||
+        (this->password != B.password) ||
+        (this->port != B.port)
     )
     {
         return false;
@@ -84,6 +96,22 @@ bool jsip_uri::operator==(const jsip_uri& B){
     }
     return true;
 }
+void jsip_uri::set_scheme(bool _is_secure ){
+    this->scheme = _is_secure ? "sips" : "sip";
+    std::cout << this->scheme << "\n";
+}
+void jsip_uri::set_host(jsip_str_t _host ){
+    this->host = _host;
+}
+void jsip_uri::set_user(jsip_str_t _user ){
+    this->user = _user;
+}
+void jsip_uri::set_password(jsip_str_t _password ){
+    this->password = _password;
+}
+void jsip_uri::set_port(uint16_t _port ){
+    this->port = _port;
+}
 void jsip_uri::set_param(jsip_str_t param_name , jsip_str_t param_value)
 {
     if(param_name == ""){
@@ -115,6 +143,10 @@ void jsip_uri::add_header(jsip_str_t header_name , jsip_str_t header_value){
         // generate exception
         return; 
     }
+    if(std::strpbrk(header_value.c_str() , " ") != nullptr)
+    {//value has a space
+        header_value = "\"" + header_value  + "\"";
+    }
     auto header = jsip_parameter(header_name , header_value);
     this->headers.emplace_back(header);
 }
@@ -139,7 +171,7 @@ jsip_str_t jsip_uri::to_string()
         uri_string += ";" + this->maddr_param.to_string();
     if(this->method_param.is_set())
         uri_string += ";" + this->method_param.to_string();
-    if(this->ttl_param != NULL)
+    if(this->ttl_param != '\0')
         {
             uri_string += ";ttl=";
             uri_string += std::to_string(this->ttl_param);
@@ -169,6 +201,15 @@ jsip_str_t jsip_uri::to_string()
     }
     return uri_string;
 }
+jsip_parser::jsip_parser(const char* buffer)
+{
+    curr_char = (char *)std::calloc(1,strlen(buffer));
+    parse_buffer = (char *)std::calloc(1,strlen(buffer));
+    std::memset(curr_char,0,strlen(buffer));
+    std::memcpy(curr_char , buffer , strlen(buffer));
+    std::memset(parse_buffer,0,strlen(buffer));
+    std::memcpy(parse_buffer , buffer , strlen(buffer));
+};
 jsip_str_t jsip_parser::parse_token(const char* delimiter_set){
     auto token_end = std::strpbrk(curr_char , delimiter_set);
     if(token_end == nullptr)
@@ -177,7 +218,6 @@ jsip_str_t jsip_parser::parse_token(const char* delimiter_set){
     curr_char = (token_end);
     return token;
 }
-
 void jsip_uri_parser::parse_scheme()
 {
     if(strncasecmp((curr_char) , "sip:" , 4) == 0)
@@ -195,23 +235,39 @@ void jsip_uri_parser::parse_scheme()
     }
 }
 void jsip_uri_parser::parse()
-{
-    jsip_str_t scheme = "";
+{//sip uri := scheme:[user[:password]@]host[:port][;uri-paramters][?headers]
     jsip_str_t host = "";
     jsip_str_t password = "";
     jsip_str_t user = "";
     uint16_t port = 0;
     bool is_secure = false;
-
-    //sip uri := scheme:[user[:password]]host[:port][;uri-paramters][?headers]
-    this->parse_scheme();  //scheme ::= [ sip | sips ]
+    jsip_str_t uri_paramters;
+    jsip_str_t uri_headers;
+    //scheme:[user[:password]@]host[:port][;uri-paramters][?headers]
+    std::cout << "sip uri to parse is " <<  curr_char << "\n";
+    if(strncasecmp((curr_char) , "sip:" , 4) == 0)
+    { //sip uri scheme
+        curr_char += 4;
+    }
+    else if(strncasecmp(curr_char , "sips:" , 5) == 0)
+    {//sips uri scheme
+        curr_char += 5;
+        is_secure = true;
+    }
+    else
+    {//unknown uri scheme
+        std::cout << "Unknown uri scheme\n";
+        return;
+    }
     //uri-parmaters ::= uri-param / ;uri-parameters]
     //headers ::= header / &headers
     if(curr_char == nullptr)
-    {
+    {   
+        //throw
         std::cout << "invalid uri\n";
         return;
     }
+    //[user[:password]@]host[:port][;uri-paramters][?headers]
     auto userinfo =  parse_token("@");
     if(userinfo != "")
     {//uri has user info
@@ -220,24 +276,34 @@ void jsip_uri_parser::parse()
             user = userinfo;
         }
         else{
-            curr_char++;
             user = jsip_str_t(userinfo.c_str() , user_end);
-            password = user_end ;
+            password = user_end + 1;
         }
+        curr_char++;
     }
-    std::cout << "After parsing userinfo  " << curr_char << '\n';
-    auto hostpart =  parse_token(":;?");
-    std::cout << "After parsing host part " << curr_char << '\n';
+    //host[:port][;uri-paramters][?headers]
+    host =  parse_token(":;?");
+    this->sip_uri = new jsip_uri(is_secure  , host , user, password , 0 );
     if( curr_char != nullptr)
     { //string trailing the host
         if(curr_char[0] == ':')
-        {   
+        {   //port exists
             curr_char++;
              try
              {
-                auto port_part = parse_token(";?\0").c_str();
+                // auto curr_char_cpy = curr_char;
+                auto port_part = parse_token(";?\0");
+                if(port_part == "")
+                {// nothing tailing port
+                    if(curr_char[0] == ';')
+                        goto process_params;
+                    if(curr_char[0] == '?')
+                        goto process_headers;
+                    port_part = curr_char ;
+                    curr_char += strlen(port_part.c_str());
+                }
                 port = (uint16_t)std::stoi(port_part);
-                std::cout << "After parsing port " << curr_char << '\n';
+                this->sip_uri->set_port(port);
              }
              catch(const std::exception& e)
              {
@@ -246,5 +312,58 @@ void jsip_uri_parser::parse()
              }
              
         }
+        process_params:
+            //[;uri-paramters][?headers]
+            while (curr_char[0] == ';')
+            {
+                curr_char++;
+                auto token = parse_token(";?");
+                if(token == "")
+                {
+                    token = curr_char;
+                }
+                auto equal_char = std::strpbrk(token.c_str() ,"=");
+                if(equal_char== nullptr)
+                {
+                    if(strcasecmp(token.c_str() , "lr") == 0)
+                    {
+                        this->sip_uri->set_lr_param(true);
+                    }
+                    else
+                    {
+                        this->sip_uri->set_param(token , "");
+                    }
+                }
+                else
+                {
+                    auto param_name = jsip_str_t(token.c_str() , equal_char);
+                    auto param_value = jsip_str_t(equal_char + 1 , equal_char + token .length());
+                    if(strcasecmp(param_name.c_str() , "ttl") == 0)
+                    {
+                        this->sip_uri->set_ttl_param((uint8_t)stoi(param_value));
+                    }
+                    else if(strcasecmp(token.c_str() , "lr") == 0)
+                    {
+                        std::cout << "lr param should not carry value \n" ;
+                        throw("lr param should not carry value \n");
+                    }
+                    else
+                    {
+                        this->sip_uri->set_param(param_name , param_value);
+                    }
+                }
+                
+            }
+        process_headers:
+            //[?headers]
+            while(curr_char[0] == '?' || curr_char[0] == '&' )
+            {
+                curr_char++; 
+                auto token = parse_token("&");
+                if(token == "")
+                {
+                    token = curr_char;
+                }
+            }
     }
 };
