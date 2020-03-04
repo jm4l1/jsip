@@ -18,12 +18,94 @@
 #define URI_USER_RESERVED_SET ":@"
 #define URI_PASS_RESERVED_SET ";/?:@"
 
+#define JSIP_SIP_VERSION "SIP/2.0"
+
 class jsip_parameter;
 
 typedef std::string jsip_str_t;
 typedef std::vector<jsip_parameter> jsip_param_list_t;
 
-static jsip_str_t convert_to_escaped_string(const char* unescaped_string , const char* reserved_set){
+typedef enum jsip_method
+{
+    INVITE,
+    ACK,
+    OPTIONS,
+    BYC,
+    CANCEL,
+    REGISTER
+}jsip_method_t;
+typedef enum jsip_info_code 
+{
+    Trying = 100,
+    Ringing = 180,
+    Call_Is_Being_Forwarded = 181,
+    Queued = 182,
+    Session_Progress = 183
+}jsip_info_code_t;
+typedef enum jsip_success_code 
+{
+    OK = 200
+}jsip_success_code_t;
+typedef enum jsip_redirect_code 
+{
+    Multiple_Choice = 300,
+    Moved_Permanently = 301,
+    Moved_Temporarily = 302,
+    Use_Proxy = 305,
+    Alternative_Service = 380
+
+}jsip_redirect_code_t;
+typedef enum jsip_client_error_code
+{
+    Bad_Request = 400,
+    Unauthorized = 401,
+    Payment_required=402,
+    Forbidden=403,
+    Not_Found = 404,
+    Method_Not_Allowed=405,
+    Not_Acceptable=406,
+    Proxy_Authentication_Required=407,
+    Request_Timeout=408,
+    Gone=410,
+    Request_Entity_Too_Large=413,
+    Request_URI_Too_Large=414,
+    Unsupported_Media_Type=415,
+    Unsupported_URI_Scheme=416,
+    Bad_Extenstion = 421,
+    Extension_Required = 422,
+    Interval_Too_Brief=423,
+    Temporarily_Unavailable=480,
+    Transaction_Does_Not_Exists=481,
+    Loop_Detected=482,
+    Too_Many_Hops=483,
+    Address_Incomplete=484,
+    Ambiguous=485,
+    Busy_Here=486,
+    Request_Terminated=487,
+    Not_Acceptable_Here=488,
+    Request_Pending=491,
+    Undecipherable=493
+
+}jsip_client_error_code;
+typedef enum jsip_server_error_code
+{
+    Server_Internal_Error=500,
+    Not_Implemented=501,
+    Bad_Gateway=502,
+    Service_Unavailable=503,
+    Service_Time_Out=504,
+    SIP_Version_Not_Supported=505,
+    Message_Too_Large=513
+}jsip_server_error_code_t;
+typedef enum jsip_global_failure_code
+{
+    Busy_Everywhere = 600,
+    Decline = 603,
+    Does_Not_Exist_Anywhere=604,
+    Not_Acceptable=606
+}jsip_global_failure_code_t;
+static jsip_str_t convert_to_escaped_string(const char* unescaped_string , const char* reserved_set)
+{
     std::stringstream escaped_string_stream;
     char *unescaped_string_tracker = (char *)unescaped_string;
     auto parser = std::strpbrk(unescaped_string , reserved_set);
@@ -121,4 +203,5 @@ class jsip_uri_parser : public jsip_parser
         void parse() override;
         jsip_uri get_uri(){ return *this->sip_uri;};
 };
+
 #endif
