@@ -5,9 +5,6 @@ jsip_parameter::jsip_parameter(){
 jsip_parameter::jsip_parameter(const jsip_str_t key, const jsip_str_t value){
     kv_pair = std::make_pair(key , value);
 }
-inline jsip_str_t jsip_parameter::to_string(){
-    return  kv_pair.first + "=" + kv_pair.second;
-}
 bool jsip_parameter::operator==(const jsip_parameter& B){
     return this->kv_pair == B.kv_pair;
 }
@@ -263,9 +260,7 @@ void jsip_uri_parser::parse()
     //headers ::= header / &headers
     if(curr_char == nullptr)
     {   
-        //throw
-        std::cout << "invalid uri\n";
-        return;
+        throw(INVALID_URI_EXCEPTION_MSG);
     }
     //[user[:password]@]host[:port][;uri-paramters][?headers]
     auto userinfo =  parse_token("@");
@@ -344,8 +339,7 @@ void jsip_uri_parser::parse()
                     }
                     else if(strcasecmp(token.c_str() , "lr") == 0)
                     {
-                        std::cout << "lr param should not carry value \n" ;
-                        throw("lr param should not carry value \n");
+                        throw(LR_VALUE_EXCEPTION_MSG);
                     }
                     else
                     {
@@ -367,3 +361,96 @@ void jsip_uri_parser::parse()
             }
     }
 };
+
+jsip_request::jsip_request(
+    jsip_method_t _method,
+    jsip_uri request_uri,
+    jsip_str_t call_id,
+    jsip_str_t to , 
+    jsip_str_t to_tag,
+    jsip_str_t from ,
+    jsip_str_t from_tag ,
+    jsip_method_t cseq_method,
+    uint32_t cseq_num,
+    int max_forwards 
+)
+{
+    this->method = _method;
+    this->request_uri = request_uri;
+    this->call_id = call_id;
+    this->to_header = to;
+    this->from_tag = to_tag;
+    this->from_header = from;
+    this->from_tag = from_tag;
+    this->cseq_method = cseq_method;
+    this->cseq_num = cseq_num;
+    this->max_forwards = max_forwards;
+}
+void jsip_request::add_via(jsip_via via)
+{
+    this->vias.emplace_back(via);
+};
+void jsip_request::add_to_param(jsip_parameter param)
+{
+    this->to_params.emplace_back(param);
+};
+void jsip_request::add_to_param(jsip_str_t param_name , jsip_str_t param_value)
+{
+    auto param = jsip_parameter(param_name, param_value);
+    this->to_params.emplace_back(param);
+};
+void jsip_request::add_from_param(jsip_parameter param)
+{
+    this->from_params.emplace_back(param);
+};
+void jsip_request::add_from_param(jsip_str_t param_name , jsip_str_t param_value)
+{
+    auto param = jsip_parameter(param_name, param_value);
+    this->from_params.emplace_back(param);
+};
+jsip_str_t jsip_request::to_string()
+{
+    jsip_str_t request_str = "";
+    jsip_str_t request_line = get_method_str(this->method) + SP + this->request_uri.to_string() + SP + JSIP_SIP_VERSION + CRLF;
+
+    
+    request_str += request_line;
+    for( auto via:vias)
+    {
+        request_str += via.to_string();
+        request_str += CRLF;
+    }
+    request_str += ("Max-Forwards: " + std::to_string(this->max_forwards) + CRLF ) ;
+    if(contacts.size() == 0)
+    {
+        request_str += "Contact: <*>";
+        request_str += CRLF;
+    }
+    else
+    {
+        for(auto contact:contacts)
+        {
+            request_str += contact.to_string();
+            request_str += CRLF;
+        }
+    }
+    
+    
+    request_str += ( "TO: " + this->to_header+ (this->to_tag != "" ? ";tag=" + this->to_tag : ""));
+    for( auto param:this->to_params)
+    {
+        request_str += ";" + param.to_string();
+    }
+    request_str += CRLF;
+    request_str += ( "FROM: " + this->from_header+ (this->from_tag != "" ? ";tag=" + this->from_tag : ""));
+    for( auto param:this->from_params)
+    {
+        request_str += ";" + param.to_string();
+    }
+    request_str += CRLF;
+    request_str += ("Call-ID:" + this->call_id + CRLF);
+    request_str += ("CSeq : " + std::to_string(this->cseq_num) + SP +  get_method_str(this->cseq_method) + CRLF);
+    request_str += CRLF;
+
+    return request_str;
+}
