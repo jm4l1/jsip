@@ -19,6 +19,12 @@
 #define PASSWORD_WITH_NO_USER_EXCEPTION_MSG "Password Cannot be set with out user"
 #define INVALID_URI_EXCEPTION_MSG "Parsing Failed ,No Valid URI Found Parsed"
 #define LR_VALUE_EXCEPTION_MSG "lr Parameter should not have paramter value"
+#define UNKNOWN_METHOD_EXCEPTION_MESSAGE "Method Type Not Supported"
+#define REQUEST_PARSE_EXEPTION_MSG "Parsing Request Failed , Malformed Request"
+#define VIA_PARSER_EXCEPTION_MSG "Parsing Via Failed"
+#define ADDR_SPEC_PARSE_EXEPTION_MSG "Parsing Addr Spec Failed"
+#define CSEQ_NUM_EXCEPTION_MSG "Invalid Type provided for CSeq Number , Number Expected"
+#define UNKNOWN_URI_EXCEPTION_MSG "Unknown URI Scheme"
 
 #define URI_RESERVED_SET ";/?:@&=+$,"
 #define URI_USER_RESERVED_SET ":@"
@@ -27,20 +33,24 @@
 #define JSIP_SIP_VERSION "SIP/2.0"
 #define RFC3261_BRANCH_PREFIX "z9hG4bk"
 
+
+#define COLON ":"
+#define COMMA ','
 #define CRLF "\r\n"
-#define SP " "
-#define LAQUOT "<"
+#define DQUOTE '\"'
+#define EQUAL '='
+#define LAQUOT '<'
 #define RAQUOT ">"
-#define DQUOTE "\""
+#define SEMI ';'
+#define SLASH "/"
+#define SP " "
+#define STAR '*'
+
 static uint32_t next_cseq = 0;
 class jsip_parameter;
 struct jsip_via;
-struct jsip_contact;
+struct jsip_addr_spec;
 
-typedef std::string jsip_str_t;
-typedef std::vector<jsip_parameter> jsip_param_list_t;
-typedef std::vector<jsip_via> jsip_via_list_t;
-typedef std::vector<jsip_contact> jsip_contact_list_t;
 typedef enum jsip_method
 {
     INVITE,
@@ -48,8 +58,18 @@ typedef enum jsip_method
     OPTIONS,
     BYE,
     CANCEL,
-    REGISTER
+    REGISTER,
+    NOTIFY,
+    INFO
 }jsip_method_t;
+
+typedef std::string jsip_str_t;
+typedef std::stringstream jsip_strstream_t;
+typedef std::vector<jsip_parameter> jsip_param_list_t;
+typedef std::vector<jsip_via> jsip_via_list_t;
+typedef std::vector<jsip_addr_spec> jsip_addr_spec_list_t;
+typedef std::vector<jsip_method_t> jsip_method_list_t;
+
 typedef enum class jsip_info_code 
 {
     Trying = 100,
@@ -150,6 +170,47 @@ static inline uint32_t get_next_cseq()
 {
     return next_cseq++;
 }
+static void trim_string(jsip_str_t *string)
+{
+    auto first_nws = string->find_first_not_of(' ');
+    if(first_nws != jsip_str_t::npos)
+    {
+        string->erase(string->begin(), string->begin() + (first_nws));
+    }
+    auto last_nws = string->find_last_not_of(' ');
+    if(last_nws != jsip_str_t::npos)
+    {
+        string->erase(string->begin() + last_nws + 1  , string->end());
+    }
+}
+static jsip_str_t get_next_token(jsip_str_t *string , jsip_str_t delimiter)
+{
+    jsip_str_t token;
+    auto first_ws = string->find_first_of(delimiter);
+    if(first_ws == jsip_str_t::npos){
+        token = *string;
+        string->erase(string->begin(),string->end());
+        *string = "";
+        return token;
+    }
+    token = jsip_str_t(string->begin(), string->begin() + first_ws);
+    string->erase(string->begin(), string->begin() + first_ws + 1);
+    return token;
+}
+static jsip_str_t get_next_token(jsip_str_t *string , const char delimiter)
+{
+    jsip_str_t token;
+    auto first_ws = string->find_first_of(delimiter);
+    if(first_ws == jsip_str_t::npos){
+        token = *string;
+        string->erase(string->begin(),string->end());
+        *string = "";
+        return token;
+    }
+    token = jsip_str_t(string->begin(), string->begin() + first_ws);
+    string->erase(string->begin(), string->begin() + first_ws + 1);
+    return token;
+}
 /*
 cryptographic functions to generated random string 
 static uint32_t timeUniquifier()
@@ -185,9 +246,48 @@ static jsip_str_t get_method_str(jsip_method_t method){
             return "BYE";
         case jsip_method_t::OPTIONS:
             return "OPTIONS";
+        case jsip_method_t::NOTIFY:
+            return "NOTIFY";
+        case jsip_method_t::INFO:
+            return "INFO";
         default:
             return "";
     }
+}
+static jsip_method_t get_method_from_str(jsip_str_t method_str){
+    if(method_str == "INVITE")
+    {
+        return jsip_method_t::INVITE;
+    }
+    if(method_str == "ACK")
+    {
+        return jsip_method_t::ACK;
+    }
+    if(method_str == "REGISTER")
+    {
+        return jsip_method_t::REGISTER;
+    }
+    if(method_str == "CANCEL")
+    {
+        return jsip_method_t::CANCEL;
+    }
+    if(method_str == "BYE")
+    {
+        return jsip_method_t::BYE;
+    }
+    if(method_str == "OPTIONS")
+    {
+        return jsip_method_t::OPTIONS;
+    }
+    if(method_str == "NOTIFY")
+    {
+        return jsip_method_t::NOTIFY;
+    }
+    if(method_str == "INFO")
+    {
+        return jsip_method_t::INFO;
+    }
+    throw(UNKNOWN_METHOD_EXCEPTION_MESSAGE);
 }
 class jsip_parameter
 {
@@ -245,31 +345,6 @@ class jsip_uri
 
         jsip_str_t to_string();
 };
-class jsip_parser
-{
-    protected:
-        char *curr_char;
-        char *parse_buffer;
-        const char* delimit_set;
-    public:
-        jsip_parser(const char* buffer);
-        ~jsip_parser(){free(parse_buffer);};
-        jsip_str_t parse_token(const char* delimiter);
-        virtual void parse(){};
-};
-class jsip_uri_parser : public jsip_parser
-{
-    private:
-        const char *param_set = ";?> \t\f";
-        const char *header_set = "&> \t\f";
-        jsip_uri *sip_uri;
-    public:
-        jsip_uri_parser(const char* buffer) : jsip_parser{buffer} {};
-        ~jsip_uri_parser(){} ;
-        void parse_scheme();
-        void parse() override;
-        jsip_uri get_uri(){ return *this->sip_uri;};
-};
 struct jsip_via
 {
     const jsip_str_t prtocol_name = "SIP";
@@ -283,13 +358,13 @@ struct jsip_via
     jsip_str_t branch;
     jsip_param_list_t extensions;
 
-     inline void set_transport(jsip_str_t _transport){ this->transport = _transport;};
-     inline void set_sent_host(jsip_str_t _sent_host){ this->sent_host = _sent_host;};
-     inline void set_host_port(uint16_t _host_port){ this->host_port = _host_port;};
-     inline void set_ttl(uint8_t _ttl){ this->ttl = _ttl;};
-     inline void set_maddr(jsip_str_t _maddr){ this->maddr = _maddr;};
-     inline void set_received(jsip_str_t _received){ this->received = _received;};
-     inline void set_branch(jsip_str_t _branch){ this->branch = _branch;};
+    inline void set_transport(jsip_str_t _transport){ this->transport = _transport;};
+    inline void set_sent_host(jsip_str_t _sent_host){ this->sent_host = _sent_host;};
+    inline void set_host_port(uint16_t _host_port){ this->host_port = _host_port;};
+    inline void set_ttl(uint8_t _ttl){ this->ttl = _ttl;};
+    inline void set_maddr(jsip_str_t _maddr){ this->maddr = _maddr;};
+    inline void set_received(jsip_str_t _received){ this->received = _received;};
+    inline void set_branch(jsip_str_t _branch){ this->branch = _branch;};
     void add_extension(jsip_str_t extension_name , jsip_str_t extension_value ){
         auto extension = jsip_parameter(extension_name , extension_value);
         this->extensions.emplace_back(extension);
@@ -319,18 +394,51 @@ struct jsip_via
         return via_str;
     }
 };
-struct jsip_contact
+struct jsip_addr_spec
 {
     jsip_str_t display_name;
     jsip_uri uri;
-    jsip_contact(jsip_uri uri , jsip_str_t display_name){ this->uri = uri ; this->display_name = display_name ;};
+    jsip_param_list_t params;
+    bool remove_bindings;
+    jsip_addr_spec()=default;
+    jsip_addr_spec(jsip_uri uri , jsip_str_t display_name){ this->uri = uri ; this->display_name = display_name ;};
     jsip_str_t to_string(){
-        jsip_str_t contact_uri_str = "Contact: ";
+        if(this->remove_bindings)
+        {
+            return "*";
+        }
+        jsip_str_t contact_uri_str = "";
+        auto uri_str =uri.to_string();
         if(display_name != ""){
             contact_uri_str += ( DQUOTE + display_name + DQUOTE + SP) ;
-        } 
-        contact_uri_str += LAQUOT + uri.to_string() + RAQUOT ;
+            contact_uri_str += LAQUOT + uri_str + RAQUOT ;
+        }
+        else if(strpbrk(uri_str.c_str() , ",;?") != nullptr)
+        {
+            contact_uri_str += LAQUOT + uri_str + RAQUOT ;
+        }
+        else
+        {
+            contact_uri_str += uri_str;
+        }
+
+        for(auto param:params)
+        {
+            contact_uri_str += SEMI;
+            contact_uri_str += param.to_string();
+        }
         return contact_uri_str;
+    }
+    void add_param(jsip_parameter param){
+        this->params.emplace_back(param);
+    }
+    void add_param(jsip_str_t param_name ,jsip_str_t param_value ){
+        auto param = jsip_parameter(param_name , param_value);
+        this->params.emplace_back(param);
+    }
+    void set_remove_bindings(bool _remove_bindings)
+    {
+        this->remove_bindings = _remove_bindings;
     }
 };
 class jsip_request
@@ -340,26 +448,26 @@ class jsip_request
         jsip_uri request_uri;
         jsip_str_t version = JSIP_SIP_VERSION;
         jsip_str_t call_id;
-        jsip_str_t to_header;
+        jsip_addr_spec to_header;
         jsip_str_t to_tag;
         jsip_param_list_t to_params;
-        jsip_str_t from_header;
-        jsip_str_t from_tag;
+        jsip_addr_spec from_header;
         jsip_param_list_t from_params;
+        jsip_str_t from_tag;
         uint32_t cseq_num;
         jsip_method_t cseq_method;
         int max_forwards;
         jsip_via_list_t vias;
-        jsip_contact_list_t contacts;
+        jsip_addr_spec_list_t contacts;
+        int expires = -1;
+        jsip_method_list_t allow_header;
+        
     public:
+        jsip_request() = default;
         jsip_request(
-            jsip_method_t _method,
+            jsip_method_t method,
             jsip_uri request_uri,
             jsip_str_t call_id,
-            jsip_str_t to , 
-            jsip_str_t to_tag,
-            jsip_str_t from ,
-            jsip_str_t from_tag ,
             jsip_method_t cseq_method,
             uint32_t cseq_num,
             int max_forwards 
@@ -367,16 +475,95 @@ class jsip_request
         ~jsip_request() = default;
         jsip_str_t to_string();
         void add_via(jsip_via via);
-        inline void set_to_tag(jsip_str_t tag){ this->to_tag = tag;};
-        inline void set_from_tag(jsip_str_t tag){ this->from_tag = tag;};
-        void add_to_param(jsip_parameter param);
+        void set_to_header(jsip_uri uri , jsip_str_t display_name);
+        void set_to_header(jsip_addr_spec to_uri);
+        void set_from_header(jsip_uri uri , jsip_str_t display_name);
+        void set_from_header(jsip_addr_spec from_uri);
+        void set_request_method(jsip_method_t _method);
+        void set_request_uri (jsip_uri request_uri);
+        void set_call_id_header(jsip_str_t call_id_value);
+        void set_cseq_header(jsip_str_t cseq_value);
         void add_to_param(jsip_str_t param_name , jsip_str_t param_value);
-        void add_from_param(jsip_parameter param);
+        void add_to_param(jsip_parameter param);
         void add_from_param(jsip_str_t param_name , jsip_str_t param_value);
-        void add_contact(jsip_uri uri , jsip_str_t display_name) {
-            auto contact = jsip_contact(uri,display_name);
-            this->contacts.emplace_back(contact);
+        void add_from_param(jsip_parameter param);
+        void add_allow_method(jsip_method_t method);
+        void add_contact(jsip_uri uri , jsip_str_t display_name);
+        void add_contact(jsip_addr_spec contact);
+        inline void set_max_forwards_header(int max_forwards_value)
+        { 
+            this->max_forwards =max_forwards_value ;
+        };
+        inline void set_expires_header(int expires_value)
+        {
+            this->expires =expires_value ;
+        };
+        inline void set_to_tag(jsip_str_t tag_value)
+        {
+            this->to_tag = tag_value;
+        };
+        inline void set_from_tag(jsip_str_t tag_value)
+        {
+            this->from_tag = tag_value;
         };
 
+};
+class jsip_parser
+{
+    protected:
+        char *curr_char;
+        char *parse_buffer;
+        const char* delimit_set;
+    public:
+        jsip_parser(const char* buffer);
+        ~jsip_parser(){free(parse_buffer);};
+        jsip_str_t parse_token(const char* delimiter);
+        virtual void parse(){};
+        inline jsip_str_t get_original_message(){ return this->parse_buffer;}
+};
+class jsip_uri_parser : public jsip_parser
+{
+    private:
+        const char *param_set = ";?> \t\f";
+        const char *header_set = "&> \t\f";
+        jsip_uri *sip_uri;
+    public:
+        jsip_uri_parser(const char* buffer) : jsip_parser{buffer} {};
+        ~jsip_uri_parser(){} ;
+        void parse_scheme();
+        void parse() override;
+        inline jsip_uri get_uri(){ return *this->sip_uri;};
+};
+class jsip_request_parser : public jsip_parser
+{
+    private:
+        jsip_request request;
+    public:
+        jsip_request_parser(const char* buffer) : jsip_parser{buffer} {};
+        ~jsip_request_parser(){} ;
+        void parse() override;
+        void parse_request_line(jsip_str_t *curr_line);
+        void parse_sip_header(jsip_str_t *curr_line);
+        inline jsip_request get_request(){ return this->request;};
+};
+class jsip_via_parser : public jsip_parser
+{
+    private:
+        jsip_via via;
+    public:
+        jsip_via_parser(const char* buffer) : jsip_parser{buffer} {};
+        ~jsip_via_parser(){};
+        void parse() override;
+        inline jsip_via get_via(){ return this->via;};
+};
+class jsip_addr_spec_parser : public jsip_parser
+{
+    private:
+        jsip_addr_spec addr_spec;
+    public:
+        jsip_addr_spec_parser(const char* buffer) : jsip_parser{buffer} {};
+        ~jsip_addr_spec_parser(){};
+        void parse() override;
+        inline jsip_addr_spec get_addr_spec(){ return this->addr_spec;};
 };
 #endif
