@@ -772,8 +772,13 @@ void jsip_request_parser::parse_sip_header(jsip_str_t *curr_line)
         while(!(*curr_line).empty()){
             auto method_str = get_next_token(curr_line, COMMA);
             trim_string(curr_line);
-            auto method = get_method_from_str(method_str);
-            this->request.add_allow_method(method);
+            try{
+                auto method = get_method_from_str(method_str);
+                this->request.add_allow_method(method);
+            }
+            catch(const char*){
+                
+            }
         }
         return;
     }
@@ -785,11 +790,12 @@ void jsip_request_parser::parse(){
 
     std::getline(buffer_stream,curr_line);
     trim_string(&curr_line);
-
+    curr_line.erase( std::remove(curr_line.begin(),curr_line.end(), '\r'), curr_line.end() );
     this->parse_request_line(&curr_line);
 
     while(std::getline(buffer_stream,curr_line)) 
     {
+        curr_line.erase( std::remove(curr_line.begin(),curr_line.end(), '\r'), curr_line.end() );
         trim_string(&curr_line);
         this->parse_sip_header(&curr_line);
     }
