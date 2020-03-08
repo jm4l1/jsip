@@ -369,22 +369,6 @@ void jsip_uri_parser::parse()
             }
     }
 };
-jsip_request::jsip_request(
-    jsip_method_t _method,
-    jsip_uri request_uri,
-    jsip_str_t call_id,
-    jsip_method_t cseq_method,
-    uint32_t cseq_num,
-    int max_forwards 
-)
-{
-    this->method = _method;
-    this->request_uri = request_uri;
-    this->call_id = call_id;
-    this->cseq_method = cseq_method;
-    this->cseq_num = cseq_num;
-    this->max_forwards = max_forwards;
-};
 void jsip_request::set_request_method(jsip_method_t _method)
 {
     this->method = _method;
@@ -393,28 +377,28 @@ void jsip_request::set_request_uri (jsip_uri request_uri)
 {
     this->request_uri = request_uri;
 };
-void jsip_request::set_to_header(jsip_uri uri , jsip_str_t display_name)
+void jsip_message::set_to_header(jsip_uri uri , jsip_str_t display_name)
 {
     auto to_uri = jsip_addr_spec(uri,display_name);
     this->to_header = to_uri;
 };
-void jsip_request::set_to_header(jsip_addr_spec to_uri){
+void jsip_message::set_to_header(jsip_addr_spec to_uri){
     this->to_header = to_uri;
 };
-void jsip_request::set_from_header(jsip_uri uri , jsip_str_t display_name)
+void jsip_message::set_from_header(jsip_uri uri , jsip_str_t display_name)
 {
     auto from_uri = jsip_addr_spec(uri,display_name); 
     this->from_header = from_uri;
 };
-void jsip_request::set_from_header(jsip_addr_spec from_uri)
+void jsip_message::set_from_header(jsip_addr_spec from_uri)
 {
     this->from_header = from_uri;
 };
-void jsip_request::set_call_id_header(jsip_str_t call_id_value)
+void jsip_message::set_call_id_header(jsip_str_t call_id_value)
 {
     this->call_id = call_id_value;
 };
-void jsip_request::set_cseq_header(jsip_str_t cseq_value)
+void jsip_message::set_cseq_header(jsip_str_t cseq_value)
 {
     trim_string(&cseq_value);
     auto cseq_num = get_next_token(&cseq_value , SP);
@@ -427,54 +411,52 @@ void jsip_request::set_cseq_header(jsip_str_t cseq_value)
     trim_string(&cseq_value);
     this->cseq_method = get_method_from_str(cseq_value);
 };
-void jsip_request::add_via(jsip_via via)
+void jsip_message::add_via(jsip_via via)
 {
     this->vias.emplace_back(via);
 };
-void jsip_request::add_to_param(jsip_parameter param)
+void jsip_message::add_to_param(jsip_parameter param)
 {
     this->to_params.emplace_back(param);
 };
-void jsip_request::add_to_param(jsip_str_t param_name , jsip_str_t param_value)
+void jsip_message::add_to_param(jsip_str_t param_name , jsip_str_t param_value)
 {
     auto param = jsip_parameter(param_name , param_value);
     this->to_params.emplace_back(param);
 };
-void jsip_request::add_from_param(jsip_parameter param)
+void jsip_message::add_from_param(jsip_parameter param)
 {
     this->from_params.emplace_back(param);
 };
-void jsip_request::add_from_param(jsip_str_t param_name , jsip_str_t param_value)
+void jsip_message::add_from_param(jsip_str_t param_name , jsip_str_t param_value)
 {
     auto param = jsip_parameter(param_name , param_value);
     this->from_params.emplace_back(param);
 };        
-void jsip_request::add_allow_method(jsip_method_t method)
+void jsip_message::add_allow_method(jsip_method_t method)
 {
     this->allow_header.emplace_back(method);
 };
-void jsip_request::add_contact(jsip_uri uri , jsip_str_t display_name)
+void jsip_message::add_contact(jsip_uri uri , jsip_str_t display_name)
 {
     auto contact = jsip_addr_spec(uri,display_name);
     this->contacts.emplace_back(contact);
 };
-void jsip_request::add_contact(jsip_addr_spec contact)
+void jsip_message::add_contact(jsip_addr_spec contact)
 {
     this->contacts.emplace_back(contact);
 };
-jsip_str_t jsip_request::to_string()
+jsip_str_t jsip_message::to_string()
 {
     jsip_str_t request_str = "";
-    //request line
-    request_str += get_method_str(this->method) + SP + this->request_uri.to_string() + SP + JSIP_SIP_VERSION + CRLF;
+    //start line
+    request_str += this->start_line_to_string();
     //via header(s)
     for( auto via:vias)
     {
         request_str += via.to_string();
         request_str += CRLF;
     }
-    //Max-Forwards
-    request_str += ("Max-Forwards: " + std::to_string(this->max_forwards) + CRLF ) ;
     //Contact(s)
     for(auto contact:contacts)
     {
@@ -517,6 +499,7 @@ jsip_str_t jsip_request::to_string()
     {
         request_str += ("Expires: " + std::to_string(this->expires) + CRLF );
     }
+    request_str += this->message_specific_headers_to_string();
     if(!this->allow_header.empty())
     {
         request_str += "Allow: ";
@@ -528,6 +511,34 @@ jsip_str_t jsip_request::to_string()
     }
 
     request_str += CRLF;
+    return request_str;
+}
+jsip_request::jsip_request(
+    jsip_method_t _method,
+    jsip_uri request_uri,
+    jsip_str_t call_id,
+    jsip_method_t cseq_method,
+    uint32_t cseq_num,
+    int max_forwards 
+)
+{
+    this->method = _method;
+    this->request_uri = request_uri;
+    this->call_id = call_id;
+    this->cseq_method = cseq_method;
+    this->cseq_num = cseq_num;
+    this->max_forwards = max_forwards;
+};
+jsip_str_t jsip_request::start_line_to_string()
+{
+    //request line
+    return get_method_str(this->method) + SP + this->request_uri.to_string() + SP + JSIP_SIP_VERSION + CRLF;
+};
+jsip_str_t jsip_request::message_specific_headers_to_string()
+{
+    jsip_str_t request_str = "";
+    //Max-Forwards
+    request_str += ("Max-Forwards: " + std::to_string(this->max_forwards) + CRLF ) ;
     return request_str;
 }
 void jsip_request_parser::parse_request_line(jsip_str_t *curr_line)

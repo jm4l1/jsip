@@ -50,7 +50,7 @@ static uint32_t next_cseq = 0;
 class jsip_parameter;
 struct jsip_via;
 struct jsip_addr_spec;
-
+struct jsip_range;
 typedef enum jsip_method
 {
     INVITE,
@@ -69,7 +69,8 @@ typedef std::vector<jsip_parameter> jsip_param_list_t;
 typedef std::vector<jsip_via> jsip_via_list_t;
 typedef std::vector<jsip_addr_spec> jsip_addr_spec_list_t;
 typedef std::vector<jsip_method_t> jsip_method_list_t;
-
+typedef std::vector<jsip_range> jsip_range_list_t;
+typedef std::vector<jsip_str_t> jsip_str_list_t;
 typedef enum class jsip_info_code 
 {
     Trying = 100,
@@ -478,27 +479,212 @@ struct jsip_addr_spec
         this->remove_bindings = _remove_bindings;
     }
 };
-class jsip_request
+struct jsip_range
+{
+    jsip_str_t range_id;
+    jsip_parameter range_param;
+
+    jsip_range()=default;
+    jsip_range( jsip_str_t _id , jsip_parameter _param ):range_id(_id),range_param(_param){};
+    ~jsip_range()=default; 
+    jsip_str_t to_string(){
+        return this->range_id + COMMA + this->range_param.to_string();
+    };
+};
+class jsip_message
+{
+    protected:
+        jsip_range_list_t accept_header;
+        jsip_range_list_t accept_encoding_header;
+        jsip_range_list_t accept_language_header;
+        jsip_range_list_t alert_info_header;
+        jsip_method_list_t allow_header;
+        jsip_str_t call_id;
+        jsip_range_list_t call_info_header;
+        jsip_addr_spec_list_t contacts;
+        jsip_range_list_t content_disposition_header;
+        jsip_range_list_t content_encoding_header;
+        int content_length;
+        jsip_range_list_t content_type_header;
+        uint32_t cseq_num;
+        jsip_method_t cseq_method;
+        jsip_str_t date;
+        int expires = -1;
+        jsip_addr_spec from_header;
+        jsip_str_t from_tag;
+        jsip_param_list_t from_params;
+        jsip_str_t mime_version_header;
+        jsip_str_t organisation_header;
+        jsip_addr_spec_list_t record_route_header;
+        jsip_addr_spec reply_to_header;
+        jsip_str_list_t require_header;
+        jsip_str_list_t supported_header;
+        jsip_str_t time_stamp;
+        jsip_addr_spec to_header;
+        jsip_str_t to_tag;
+        jsip_param_list_t to_params;
+        jsip_via_list_t vias;
+        
+    public:
+        jsip_message() = default;
+        ~jsip_message() = default;
+        jsip_str_t to_string();
+        virtual jsip_str_t start_line_to_string(){ return "";};
+        virtual jsip_str_t message_specific_headers_to_string(){return "";};
+        void add_accept(jsip_range accept_range)
+        {
+            this->accept_header.emplace_back(accept_range);
+        };
+        void add_accept(jsip_str_t media_range , jsip_parameter accept_param)
+        {
+            auto accept_range = jsip_range(media_range,accept_param);
+            this->accept_header.emplace_back(accept_range);
+        };
+        void add_accept_encoding(jsip_range accept_encoding_range)
+        {
+            this->accept_encoding_header.emplace_back(accept_encoding_range);
+        };
+        void add_accept_encoding(jsip_str_t encoding , jsip_parameter accept_encoding_param)
+        {
+            auto accept_encoding_range = jsip_range(encoding,accept_encoding_param);
+            this->accept_encoding_header.emplace_back(accept_encoding_range);
+        };
+        void add_accept_language(jsip_range accept_language_range)
+        {
+            this->accept_language_header.emplace_back(accept_language_range);
+        };
+        void add_accept_language(jsip_str_t language , jsip_parameter accept_language_param)
+        {
+            auto accept_language_range = jsip_range(language,accept_language_param);
+            this->accept_language_header.emplace_back(accept_language_range);
+        };
+        void add_alert_info(jsip_range alert_info_range)
+        {
+            this->alert_info_header.emplace_back(alert_info_range);
+        };
+        void add_alert_info(jsip_str_t alert_info_uri , jsip_parameter alert_info_param)
+        {
+            auto alert_info_range = jsip_range(alert_info_uri,alert_info_param);
+            this->alert_info_header.emplace_back(alert_info_range);
+        };
+        void add_allow_method(jsip_method_t method);
+        void set_call_id_header(jsip_str_t call_id_value);
+        void add_call_info(jsip_range call_info_range)
+        {
+            this->call_info_header.emplace_back(call_info_range);
+        };
+        void add_call_info(jsip_str_t call_info_uri , jsip_parameter call_info_param)
+        {
+            auto call_info_range = jsip_range(call_info_uri,call_info_param);
+            this->call_info_header.emplace_back(call_info_range);
+        };
+        void add_contact(jsip_addr_spec contact);
+        void add_contact(jsip_uri uri , jsip_str_t display_name);
+        void add_content_disposition(jsip_range content_disposition_range)
+        {
+            this->content_disposition_header.emplace_back(content_disposition_range);
+        };
+        void add_content_disposition(jsip_str_t disp_type , jsip_parameter content_disposition_param)
+        {
+            auto content_disposition_range = jsip_range(disp_type,content_disposition_param);
+            this->content_disposition_header.emplace_back(content_disposition_range);
+        };
+        void add_content_encoding(jsip_range content_encoding_range)
+        {
+            this->content_encoding_header.emplace_back(content_encoding_range);
+        };
+        void add_content_encoding(jsip_str_t disp_type , jsip_parameter content_encoding_param)
+        {
+            auto content_encoding_range = jsip_range(disp_type,content_encoding_param);
+            this->content_encoding_header.emplace_back(content_encoding_range);
+        };
+        void set_content_length(int _length)
+        {
+            this->content_length = _length;
+        }
+        void add_content_type(jsip_range content_type_range)
+        {
+            this->content_type_header.emplace_back(content_type_range);
+        };
+        void add_content_type(jsip_str_t disp_type , jsip_parameter content_type_param)
+        {
+            auto content_type_range = jsip_range(disp_type,content_type_param);
+            this->content_type_header.emplace_back(content_type_range);
+        };
+        void set_cseq_header(jsip_str_t cseq_value);
+        void set_date_header(jsip_str_t _date)
+        {
+            this->date = _date;
+        };
+        inline void set_expires_header(int expires_value)
+        {
+            this->expires =expires_value ;
+        };
+        void set_from_header(jsip_uri uri , jsip_str_t display_name);
+        void set_from_header(jsip_addr_spec from_uri);
+        void add_from_param(jsip_str_t param_name , jsip_str_t param_value);
+        void add_from_param(jsip_parameter param);
+        void set_mime_version_header(jsip_str_t _mime_version)
+        {
+            this->mime_version_header = _mime_version;
+        };
+        void set_organisation_header(jsip_str_t _organisation)
+        {
+            this->organisation_header = _organisation;
+        };
+        void add_record_route(jsip_uri uri , jsip_str_t display_name)
+        {
+            auto record_route = jsip_addr_spec(uri,display_name);
+            this->record_route_header.emplace_back(record_route);
+        };
+        void add_record_route(jsip_addr_spec record_route)
+        {
+            this->record_route_header.emplace_back(record_route);
+        };
+        void set_reply_to(jsip_uri uri , jsip_str_t display_name)
+        {
+            auto reply_to = jsip_addr_spec(uri,display_name);
+            this->reply_to_header = reply_to ;
+        };
+        void set_reply_to(jsip_addr_spec reply_to)
+        {
+            this->reply_to_header = reply_to ;
+        };
+        void add_require(jsip_str_t option)
+        {
+            this->require_header.emplace_back(option);
+        }
+        void add_supported(jsip_str_t option)
+        {
+            this->supported_header.emplace_back(option);
+        }
+        void set_timestamp(jsip_str_t timestamp)
+        {
+            this->time_stamp = timestamp;
+        }
+        void set_to_header(jsip_uri uri , jsip_str_t display_name);
+        void set_to_header(jsip_addr_spec to_uri);
+        void add_to_param(jsip_str_t param_name , jsip_str_t param_value);
+        void add_to_param(jsip_parameter param);
+        inline void set_to_tag(jsip_str_t tag_value)
+        {
+            this->to_tag = tag_value;
+        };
+        inline void set_from_tag(jsip_str_t tag_value)
+        {
+            this->from_tag = tag_value;
+        };
+        void add_via(jsip_via via);
+
+};
+class jsip_request : public jsip_message
 {
     private:
         jsip_method_t method;
         jsip_uri request_uri;
         jsip_str_t version = JSIP_SIP_VERSION;
-        jsip_str_t call_id;
-        jsip_addr_spec to_header;
-        jsip_str_t to_tag;
-        jsip_param_list_t to_params;
-        jsip_addr_spec from_header;
-        jsip_param_list_t from_params;
-        jsip_str_t from_tag;
-        uint32_t cseq_num;
-        jsip_method_t cseq_method;
         int max_forwards;
-        jsip_via_list_t vias;
-        jsip_addr_spec_list_t contacts;
-        int expires = -1;
-        jsip_method_list_t allow_header;
-        
+
     public:
         jsip_request() = default;
         jsip_request(
@@ -510,40 +696,25 @@ class jsip_request
             int max_forwards 
         );
         ~jsip_request() = default;
-        jsip_str_t to_string();
-        void add_via(jsip_via via);
-        void set_to_header(jsip_uri uri , jsip_str_t display_name);
-        void set_to_header(jsip_addr_spec to_uri);
-        void set_from_header(jsip_uri uri , jsip_str_t display_name);
-        void set_from_header(jsip_addr_spec from_uri);
+        jsip_str_t start_line_to_string() override;
+        jsip_str_t message_specific_headers_to_string() override;
         void set_request_method(jsip_method_t _method);
         void set_request_uri (jsip_uri request_uri);
-        void set_call_id_header(jsip_str_t call_id_value);
-        void set_cseq_header(jsip_str_t cseq_value);
-        void add_to_param(jsip_str_t param_name , jsip_str_t param_value);
-        void add_to_param(jsip_parameter param);
-        void add_from_param(jsip_str_t param_name , jsip_str_t param_value);
-        void add_from_param(jsip_parameter param);
-        void add_allow_method(jsip_method_t method);
-        void add_contact(jsip_uri uri , jsip_str_t display_name);
-        void add_contact(jsip_addr_spec contact);
         inline void set_max_forwards_header(int max_forwards_value)
         { 
             this->max_forwards =max_forwards_value ;
         };
-        inline void set_expires_header(int expires_value)
-        {
-            this->expires =expires_value ;
-        };
-        inline void set_to_tag(jsip_str_t tag_value)
-        {
-            this->to_tag = tag_value;
-        };
-        inline void set_from_tag(jsip_str_t tag_value)
-        {
-            this->from_tag = tag_value;
-        };
-
+};
+class jsip_response : public jsip_message
+{
+    private:
+        jsip_str_t version = JSIP_SIP_VERSION;
+        
+    public:
+        jsip_response() = default;
+        ~jsip_response() = default;
+        // jsip_str_t start_line_to_string() override;
+        // jsip_str_t message_specific_headers_to_string() override;
 };
 class jsip_parser
 {
