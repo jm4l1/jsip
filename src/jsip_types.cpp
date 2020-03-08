@@ -34,10 +34,13 @@ jsip_uri::jsip_uri(
         }
     }
     if(_is_secure)
+    {
         this->scheme = "sips";
+    }    
     else
+    {
         this->scheme = "sip";
-
+    }
     this->host = _host;
     this->user = convert_to_escaped_string(_user.c_str() , URI_USER_RESERVED_SET);
     this->password = convert_to_escaped_string(_password.c_str() , URI_PASS_RESERVED_SET);
@@ -508,8 +511,12 @@ jsip_str_t jsip_message::to_string()
         {
             request_str += COMMA + (SP + get_method_str(*i));
         }
+        request_str += CRLF;
     }
-
+    if( this->content_length != -1)
+    {
+        request_str += ("Content-Length: " + std::to_string(this->content_length) + CRLF );
+    }
     request_str += CRLF;
     return request_str;
 }
@@ -534,11 +541,19 @@ jsip_str_t jsip_request::start_line_to_string()
     //request line
     return get_method_str(this->method) + SP + this->request_uri.to_string() + SP + JSIP_SIP_VERSION + CRLF;
 };
+void jsip_request::set_auth_header(jsip_auth auth){
+    this->auth_header = auth;
+};
 jsip_str_t jsip_request::message_specific_headers_to_string()
 {
     jsip_str_t request_str = "";
     //Max-Forwards
     request_str += ("Max-Forwards: " + std::to_string(this->max_forwards) + CRLF ) ;
+    //Authorization
+    if(this->auth_header.auth_scheme != "")
+    {
+        request_str += ("Authorization: " + this->auth_header.to_string() + CRLF ) ;
+    }
     return request_str;
 }
 void jsip_request_parser::parse_request_line(jsip_str_t *curr_line)
@@ -680,6 +695,62 @@ void jsip_addr_spec_parser::parse()
         this->addr_spec.add_param(param_header,param);
     }
 }
+void jsip_auth_parser::parse()
+{
+    jsip_str_t buffer = curr_char;
+    trim_string(&buffer);
+    auto auth_scheme = get_next_token(&buffer , SP);
+    this->auth.auth_scheme = auth_scheme;
+    while(!buffer.empty())
+    {
+        auto digest_resp = get_next_token(&buffer,COMMA);
+        trim_string(&digest_resp);
+        auto digest_resp_name = get_next_token(&digest_resp , EQUAL);
+        trim_string(&digest_resp_name);
+        if(digest_resp_name == "username")
+        {
+            dequote_string(&digest_resp);
+            this->auth.username = digest_resp;
+            continue;
+        }
+        if(digest_resp_name == "uri")
+        {
+            dequote_string(&digest_resp);
+            auto uri_parser = jsip_uri_parser(digest_resp.c_str());
+            uri_parser.parse();
+            this->auth.digest_uri = uri_parser.get_uri();
+            continue;
+        }
+        if(digest_resp_name == "qop")
+        {
+            dequote_string(&digest_resp);
+            this->auth.qop = digest_resp;
+            continue;
+        }
+        if(digest_resp_name == "cnonce")
+        {
+            dequote_string(&digest_resp);
+            this->auth.cnonce = digest_resp;
+            continue;
+        }
+        if(digest_resp_name == "nc")
+        {
+            dequote_string(&digest_resp);
+            this->auth.nonce_count = (uint32_t)std::stoi(digest_resp);
+            continue;
+        }
+        if(digest_resp_name == "response")
+        {
+            dequote_string(&digest_resp);
+            this->auth.response = digest_resp;
+            continue;
+        }
+        trim_string(&digest_resp);
+        dequote_string(&digest_resp);
+        auto param = jsip_parameter(digest_resp_name , digest_resp);
+        this->auth.auth_params.emplace_back(param);
+    }
+}
 void jsip_request_parser::parse_sip_header(jsip_str_t *curr_line)
 {
     auto token = get_next_token(curr_line , COLON);
@@ -791,6 +862,140 @@ void jsip_request_parser::parse_sip_header(jsip_str_t *curr_line)
                 
             }
         }
+        return;
+    }
+    if(header == "Accept")
+    {
+        std::cout << header << " : " << *(curr_line) << "\n";
+        return;
+    }
+    if(header == "Accept-Encoding")
+    {
+        std::cout << header << " : " << *(curr_line) << "\n";
+        return;
+    }
+    if(header == "Accept-Language")
+    {
+        std::cout << header << " : " << *(curr_line) << "\n";
+        return;
+    }
+    if(header == "Alert-Info")
+    {
+        std::cout << header << " : " << *(curr_line) << "\n";
+        return;
+    }
+    if(header == "Authorization")
+    {
+        std::cout << header << " : " << *(curr_line) << "\n";
+        return;
+    }
+    if(header == "Call-Info")
+    {
+        std::cout << header << " : " << *(curr_line) << "\n";
+        return;
+    }
+    if(header == "Content-Disposition")
+    {
+        std::cout << header << " : " << *(curr_line) << "\n";
+        return;
+    }
+    if(header == "Content-Encoding")
+    {
+        std::cout << header << " : " << *(curr_line) << "\n";
+        return;
+    }
+    if(header == "Content-Language")
+    {
+        std::cout << header << " : " << *(curr_line) << "\n";
+        return;
+    }
+    if(header == "Content-Length")
+    { 
+        try
+        {
+            auto content_length = std::stoi(*curr_line);
+            this->request.set_content_length(content_length);
+            return;
+        }
+        catch(jsip_str_t e)
+        {
+            throw(REQUEST_PARSE_EXEPTION_MSG);
+        }
+        return;
+    }
+    if(header == "Content-Type")
+    {
+        std::cout << header << " : " << *(curr_line) << "\n";
+        return;
+    }
+    if(header == "In-Reply-To")
+    {
+        std::cout << header << " : " << *(curr_line) << "\n";
+        return;
+    }
+    if(header == "MIME-Version")
+    {
+        std::cout << header << " : " << *(curr_line) << "\n";
+        return;
+    }
+    if(header == "Organization")
+    {
+        std::cout << header << " : " << *(curr_line) << "\n";
+        return;
+    }
+    if(header == "Priority")
+    {
+        std::cout << header << " : " << *(curr_line) << "\n";
+        return;
+    }
+    if(header == "Proxy-Authorization")
+    {
+        std::cout << header << " : " << *(curr_line) << "\n";
+        return;
+    }
+    if(header == "Proxy-Require")
+    {
+        std::cout << header << " : " << *(curr_line) << "\n";
+        return;
+    }
+    if(header == "Record-Route")
+    {
+        std::cout << header << " : " << *(curr_line) << "\n";
+        return;
+    }
+    if(header == "Reply-To")
+    {
+        std::cout << header << " : " << *(curr_line) << "\n";
+        return;
+    }
+    if(header == "Require")
+    {
+        std::cout << header << " : " << *(curr_line) << "\n";
+        return;
+    }
+    if(header == "Route")
+    {
+        std::cout << header << " : " << *(curr_line) << "\n";
+        return;
+    }
+    if(header == "Subject")
+    {
+        std::cout << header << " : " << *(curr_line) << "\n";
+        return;
+    }
+    if(header == "Supported")
+    {
+        std::cout << header << " : " << *(curr_line) << "\n";
+        return;
+    }
+    if(header == "Timestamp")
+    {
+        std::cout << header << " : " << *(curr_line) << "\n";
+        return;
+    }
+    if(header == "User-Agent")
+    {
+        std::cout << header << " : " << *(curr_line) << "\n";
         return;
     }
 }

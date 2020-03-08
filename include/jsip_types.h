@@ -14,6 +14,7 @@
 #include <sys/time.h>
 #include <ctime>
 #include <cstdlib>
+#include <iomanip>
 
 #define HOST_EXCEPTION_MSG "Hostname is required"
 #define PASSWORD_WITH_NO_USER_EXCEPTION_MSG "Password Cannot be set with out user"
@@ -179,6 +180,19 @@ static void trim_string(jsip_str_t *string)
         string->erase(string->begin(), string->begin() + (first_nws));
     }
     auto last_nws = string->find_last_not_of(' ');
+    if(last_nws != jsip_str_t::npos)
+    {
+        string->erase(string->begin() + last_nws + 1  , string->end());
+    }
+}
+static void dequote_string(jsip_str_t *string)
+{
+    auto first_nws = string->find_first_not_of(DQUOTE);
+    if(first_nws != jsip_str_t::npos)
+    {
+        string->erase(string->begin(), string->begin() + (first_nws));
+    }
+    auto last_nws = string->find_last_not_of(DQUOTE);
     if(last_nws != jsip_str_t::npos)
     {
         string->erase(string->begin() + last_nws + 1  , string->end());
@@ -382,6 +396,62 @@ class jsip_uri
         inline uint8_t get_ttl_param() { return this->ttl_param; }
 
         jsip_str_t to_string();
+};
+struct jsip_auth
+{
+    // dig-resp          =  username / realm / nonce / digest-uri
+    //                   / dresponse / algorithm / cnonce
+    //                   / opaque / message-qop
+    //                   / nonce-count / auth-param
+    // username          =  "username" EQUAL username-value
+    // username-value    =  quoted-string
+    // digest-uri        =  "uri" EQUAL LDQUOT digest-uri-value RDQUOT
+    // digest-uri-value  =  rquest-uri ; Equal to request-uri as specified
+    //                     by HTTP/1.1
+    // message-qop       =  "qop" EQUAL qop-value
+    // cnonce            =  "cnonce" EQUAL cnonce-value
+    // cnonce-value      =  nonce-value
+    // nonce-count       =  "nc" EQUAL nc-value
+    // nc-value          =  8LHEX
+    // dresponse         =  "response" EQUAL request-digest
+    // request-digest    =  LDQUOT 32LHEX RDQUOT
+    // auth-param        =  auth-param-name EQUAL
+    //                     ( token / quoted-string )
+    // auth-param-name   =  token
+    jsip_str_t auth_scheme;
+    jsip_str_t username;
+    jsip_uri digest_uri;
+    jsip_str_t qop;
+    jsip_str_t cnonce;
+    uint32_t nonce_count;
+    jsip_str_t response;
+    jsip_param_list_t auth_params;
+
+    jsip_auth() = default;
+    ~jsip_auth() = default;
+    jsip_str_t to_string()
+    {
+        jsip_str_t auth_str = auth_scheme + SP;
+        if(auth_scheme == "Digest")
+        {
+            auth_str += (jsip_str_t)"username=" + DQUOTE + username + DQUOTE;
+            auth_str += COMMA + (jsip_str_t)"uri="  + DQUOTE + digest_uri.to_string() + DQUOTE;
+            auth_str += COMMA + (jsip_str_t)"qop="  + qop;
+            auth_str += COMMA + (jsip_str_t)"cnonce="  + DQUOTE + cnonce + DQUOTE;
+            std::stringstream ncstream;
+            ncstream << std::hex <<  std::setfill('0')<< std::setw(8) << nonce_count;
+            auth_str += COMMA + (jsip_str_t)"nc="  + ncstream.str();
+            auth_str += COMMA + (jsip_str_t)"response="  + DQUOTE + response + DQUOTE;
+        }
+        for(auto param : this->auth_params)
+        {
+            auth_str += COMMA + param.get_param_name() + EQUAL + DQUOTE + param.get_value() + DQUOTE;
+        }
+        return auth_str;
+    }
+
+
+
 };
 struct jsip_via
 {
@@ -684,6 +754,7 @@ class jsip_request : public jsip_message
         jsip_uri request_uri;
         jsip_str_t version = JSIP_SIP_VERSION;
         int max_forwards;
+        jsip_auth auth_header;
 
     public:
         jsip_request() = default;
@@ -700,6 +771,7 @@ class jsip_request : public jsip_message
         jsip_str_t message_specific_headers_to_string() override;
         void set_request_method(jsip_method_t _method);
         void set_request_uri (jsip_uri request_uri);
+        void set_auth_header(jsip_auth auth);
         inline void set_max_forwards_header(int max_forwards_value)
         { 
             this->max_forwards =max_forwards_value ;
@@ -763,6 +835,16 @@ class jsip_via_parser : public jsip_parser
         ~jsip_via_parser(){};
         void parse() override;
         inline jsip_via get_via(){ return this->via;};
+};
+class jsip_auth_parser : public jsip_parser
+{
+    private:
+        jsip_auth auth;
+    public:
+        jsip_auth_parser(const char* buffer) : jsip_parser{buffer} {};
+        ~jsip_auth_parser(){};
+        void parse() override;
+        inline jsip_auth get_auth(){ return this->auth;};
 };
 class jsip_addr_spec_parser : public jsip_parser
 {
