@@ -217,18 +217,55 @@ static uint32_t timeUniquifier()
 static jsip_str_t globallyUniqueId(const char *start)
 source : https://github.com/RangeNetworks/openbts
 */
-static uint32_t timeUniquifier()
+static uint32_t time_uniquifier()
 {
 	struct timeval now;
 	gettimeofday(&now,NULL);
 	return ((now.tv_sec&0xffff)<<16) + (now.tv_usec/16);	// 32 bit number that changes every 15-16 usecs.
 }
+static jsip_str_t random_string(jsip_str_t start , uint8_t len)
+{
+	// The odds of one of these colliding is vanishingly small.
+	// (pat) Actually, the odds are pretty good (like, near unity) unless you call srandom before calling random.
+	uint64_t r1 = random();
+	uint64_t r2 = random();
+	uint64_t val = (r1<<32) + r2;
+	jsip_str_t rand_string;
+	
+	// map [0->26] to [a-z] 
+	rand_string=start;
+    int k = 0;
+	while( k < len)
+    {
+        auto x = val% 177 + '0' ;
+        if(!isalnum(x))
+        {
+		    val = val >> 2;
+            continue;
+        }
+		rand_string.push_back(x);
+		val = val >> 4;
+        k++;
+	}
+	return rand_string;
+}
 
+static jsip_str_t make_tag(uint8_t len)
+{
+	return random_string("", len);
+}
+
+static jsip_str_t make_branch(uint8_t len)
+{
+	// RFC3261 17.2.3: The branch parameter should begin with the magic string "z9hG4bK" to
+	// indicate compliance with this specification.
+	return random_string(RFC3261_BRANCH_PREFIX , len);
+}
 static jsip_str_t globallyUniqueId(const char *start , uint8_t size)
 {
 	// This is a a globally unique callid.
 	char buf[size];
-	snprintf(buf,size,"%s%x-%x",start,timeUniquifier(),(unsigned)(0xffffffff&random()));
+	snprintf(buf,size,"%s%x-%x",start,time_uniquifier(),(unsigned)(0xffffffff&random()));
 	return jsip_str_t(buf);
 }
 static jsip_str_t get_method_str(jsip_method_t method){
