@@ -1,0 +1,25 @@
+# jsip
+SIP project based on [RFC 3261](https://tools.ietf.org/html/rfc3261) 
+
+## Dependencies for Running Locally
+* cmake >= 3.7
+  * All OSes: [click here for installation instructions](https://cmake.org/install/)
+* make >= 4.1 (Linux, Mac)
+  * Linux: make is installed by default on most Linux distros
+  * Mac: [install Xcode command line tools to get make](https://developer.apple.com/xcode/features/)packages/make.htm)
+* Compiler supporting implementation of `std::filesystem`
+  * gcc/g++ >= 9.3
+    * Linux: gcc / g++ is installed by default on most Linux distros
+    * Mac: same deal as make - [install Xcode command line tools](https://developer.apple.com/xcode/features/)
+  * clang >= 9.3
+## Basic Build Instructions
+
+1. Clone this repo.
+2. Make a build directory in the top level directory: `mkdir build && cd build`
+3. Compile: `export CXX=<path_to_g++9> && export CC=<path_to_gcc9> && cmake .. && make`
+4. Run it: `./jjsip`.
+
+## Tests
+A suite of tests are provided in the `test/` directory. A wide range of test are provided for various JSON parsing , generation and parsing functions.
+
+
